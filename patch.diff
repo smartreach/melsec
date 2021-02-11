@@ -1,0 +1,222 @@
+From 384eb2ecc1005b0acb5345785a5347ced3df7869 Mon Sep 17 00:00:00 2001
+From: TAKESHI SHIMADA <>
+Date: Thu, 11 Feb 2021 11:32:43 +0900
+Subject: [PATCH] =?UTF-8?q?=E3=83=87=E3=83=90=E3=83=83=E3=82=B0=E3=82=B3?=
+ =?UTF-8?q?=E3=83=BC=E3=83=89=E3=81=AE=E8=BF=BD=E5=8A=A0?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .../client/Melsec3EBinaryClientExample.java   | 171 +++++++++++-------
+ .../Melsec3EBinaryTcpServerExample.java       |   2 +-
+ 2 files changed, 103 insertions(+), 70 deletions(-)
+
+diff --git a/melsec-examples/src/main/java/com/vsdata/melsec/example/client/Melsec3EBinaryClientExample.java b/melsec-examples/src/main/java/com/vsdata/melsec/example/client/Melsec3EBinaryClientExample.java
+index 1b301cb..677f073 100644
+--- a/melsec-examples/src/main/java/com/vsdata/melsec/example/client/Melsec3EBinaryClientExample.java
++++ b/melsec-examples/src/main/java/com/vsdata/melsec/example/client/Melsec3EBinaryClientExample.java
+@@ -14,8 +14,17 @@ import java.util.concurrent.TimeUnit;
+  */
+ public class Melsec3EBinaryClientExample {
+ 
++    public static int no = 1;
++
++    public static void increment() {
++        no = no + 1;
++        if (no > 32767) {
++            no = 1;
++        }
++    }
++
+     public static void main(String[] args) {
+-        MelsecClientConfig config = new MelsecClientConfig.Builder("localhost").setPort(3000).build();
++        MelsecClientConfig config = new MelsecClientConfig.Builder("10.0.1.4").setPort(3000).build();
+         MelsecTcpClient client = MelsecTcpClient.create3EBinary(config);
+ 
+         ByteBuf data = Unpooled.buffer(8);
+@@ -28,77 +37,101 @@ public class Melsec3EBinaryClientExample {
+         data.writeBoolean(true);
+         data.writeBoolean(true);
+ 
+-        client.batchWrite("M100", 8, data)
+-            .thenCompose(r -> client.batchRead("M100", 8))
+-            .thenAccept(response -> {
+-                System.out.println(ByteBufUtil.hexDump(response));
+-            })
+-            .exceptionally(ex -> {
+-                ex.printStackTrace();
+-                return null;
+-            });
++        Executors.newSingleThreadScheduledExecutor().scheduleWithFixedDelay(() -> {
++
++            ByteBuf data1 = Unpooled.buffer(6);
++            data1.writeShort((short)no);
++            data1.writeShort(-28031);    // 1000000101001001
++            data1.writeShort(2340);      // 0010010010010000
+ 
+-        ByteBuf data1 = Unpooled.buffer(6);
+-        data1.writeShort(6549);
+-        data1.writeShort(4610);
+-        data1.writeShort(4400);
++            increment();
+ 
+-        client.batchWrite("D100", 3, data1)
+-            .thenCompose(r -> client.batchRead("D100", 3))
+-            .thenAccept(response -> {
+-                System.out.println("D100: " + response.readShort());
+-                System.out.println("D101: " + response.readShort());
+-                System.out.println("D102: " + response.readShort());
+-            })
+-            .exceptionally(ex -> {
+-                ex.printStackTrace();
+-                return null;
+-            });
++            client.batchWrite("D100", 3, data1)
++                    .thenCompose(r -> client.batchRead("D100", 3))
++                    .thenAccept(response -> {
++                        System.out.println("D100: " + response.readShort());
++                        System.out.println("D101: " + response.readShort());
++                        System.out.println("D102: " + response.readShort());
++                    })
++                    .exceptionally(ex -> {
++                        ex.printStackTrace();
++                        return null;
++                    });
+ 
+-        Executors.newSingleThreadScheduledExecutor().scheduleWithFixedDelay(() -> {
+-            client.batchRead("D100", 3)
+-                .thenAccept(response -> {
+-                    System.out.println(ByteBufUtil.hexDump(response));
+-                    System.out.println("D100: " + response.readShort());
+-                    System.out.println("D101: " + response.readShort());
+-                    System.out.println("D102: " + response.readShort());
+-                })
+-                .exceptionally(ex -> {
+-                    ex.printStackTrace();
+-                    return null;
+-                });
+-            client.batchRead("M100", 3)
+-                .thenAccept(response -> {
+-                    System.out.println(ByteBufUtil.hexDump(response));
+-                    System.out.println("M100: " + response.readBoolean());
+-                    System.out.println("M101: " + response.readBoolean());
+-                    System.out.println("M102: " + response.readBoolean());
+-                })
+-                .exceptionally(ex -> {
+-                    ex.printStackTrace();
+-                    return null;
+-                });
+-        }, 1000, 1000, TimeUnit.MILLISECONDS);
++        }, 10, 1000, TimeUnit.MILLISECONDS);
+ 
+-        Executors.newSingleThreadScheduledExecutor().scheduleWithFixedDelay(() -> {
+-            client.batchRead("M200", 2)
+-                .thenAccept(response -> {
+-                    System.out.println("M200: " + response.readBoolean());
+-                    System.out.println("M201: " + response.readBoolean());
+-                })
+-                .exceptionally(ex -> {
+-                    ex.printStackTrace();
+-                    return null;
+-                });
+-            client.batchRead("D200", 2)
+-                .thenAccept(response -> {
+-                    System.out.println("D200: " + response.readShort());
+-                    System.out.println("D201: " + response.readShort());
+-                })
+-                .exceptionally(ex -> {
+-                    ex.printStackTrace();
+-                    return null;
+-                });
+-        }, 800, 800, TimeUnit.MILLISECONDS);
++
++//        client.batchWrite("M100", 8, data)
++//            .thenCompose(r -> client.batchRead("M100", 8))
++//            .thenAccept(response -> {
++//                System.out.println(ByteBufUtil.hexDump(response));
++//            })
++//            .exceptionally(ex -> {
++//                ex.printStackTrace();
++//                return null;
++//            });
++//
++//        ByteBuf data1 = Unpooled.buffer(6);
++//        data1.writeShort(6549);
++//        data1.writeShort(4610);
++//        data1.writeShort(4400);
++//
++//        client.batchWrite("D100", 3, data1)
++//            .thenCompose(r -> client.batchRead("D100", 3))
++//            .thenAccept(response -> {
++//                System.out.println("D100: " + response.readShort());
++//                System.out.println("D101: " + response.readShort());
++//                System.out.println("D102: " + response.readShort());
++//            })
++//            .exceptionally(ex -> {
++//                ex.printStackTrace();
++//                return null;
++//            });
++//
++//        Executors.newSingleThreadScheduledExecutor().scheduleWithFixedDelay(() -> {
++//            client.batchRead("D100", 3)
++//                .thenAccept(response -> {
++//                    System.out.println(ByteBufUtil.hexDump(response));
++//                    System.out.println("D100: " + response.readShort());
++//                    System.out.println("D101: " + response.readShort());
++//                    System.out.println("D102: " + response.readShort());
++//                })
++//                .exceptionally(ex -> {
++//                    ex.printStackTrace();
++//                    return null;
++//                });
++//            client.batchRead("M100", 3)
++//                .thenAccept(response -> {
++//                    System.out.println(ByteBufUtil.hexDump(response));
++//                    System.out.println("M100: " + response.readBoolean());
++//                    System.out.println("M101: " + response.readBoolean());
++//                    System.out.println("M102: " + response.readBoolean());
++//                })
++//                .exceptionally(ex -> {
++//                    ex.printStackTrace();
++//                    return null;
++//                });
++//        }, 1000, 1000, TimeUnit.MILLISECONDS);
++//
++//        Executors.newSingleThreadScheduledExecutor().scheduleWithFixedDelay(() -> {
++//            client.batchRead("M200", 2)
++//                .thenAccept(response -> {
++//                    System.out.println("M200: " + response.readBoolean());
++//                    System.out.println("M201: " + response.readBoolean());
++//                })
++//                .exceptionally(ex -> {
++//                    ex.printStackTrace();
++//                    return null;
++//                });
++//            client.batchRead("D200", 2)
++//                .thenAccept(response -> {
++//                    System.out.println("D200: " + response.readShort());
++//                    System.out.println("D201: " + response.readShort());
++//                })
++//                .exceptionally(ex -> {
++//                    ex.printStackTrace();
++//                    return null;
++//                });
++//        }, 800, 800, TimeUnit.MILLISECONDS);
+     }
+ }
+diff --git a/melsec-examples/src/main/java/com/vsdata/melsec/example/server/Melsec3EBinaryTcpServerExample.java b/melsec-examples/src/main/java/com/vsdata/melsec/example/server/Melsec3EBinaryTcpServerExample.java
+index bf92314..16a41eb 100644
+--- a/melsec-examples/src/main/java/com/vsdata/melsec/example/server/Melsec3EBinaryTcpServerExample.java
++++ b/melsec-examples/src/main/java/com/vsdata/melsec/example/server/Melsec3EBinaryTcpServerExample.java
+@@ -16,6 +16,6 @@ public class Melsec3EBinaryTcpServerExample {
+         MelsecTcpServerConfig config = new MelsecTcpServerConfig.Builder().build();
+         MelsecTcpServer server = MelsecTcpServer.create3EBinary(config);
+         LOG.info("starting server in 3000...");
+-        server.bind("localhost", 3000);
++        server.bind("10.0.1.4", 3000);
+     }
+ }
+-- 
+2.23.0
+
